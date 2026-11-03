@@ -1,0 +1,514 @@
+<!doctype html>
+<html lang="no">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f6f7f2">
+  <meta name="description" content="En enkel handleliste med ukesbudsjett, middagsforslag og priser du kan tilpasse.">
+  <title>Min handleliste</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #20302b;
+      --muted: #64736d;
+      --green: #17694e;
+      --green-dark: #10533d;
+      --green-soft: #e8f2ec;
+      --paper: #fff;
+      --canvas: #f6f7f2;
+      --line: #e3e8e1;
+      --orange: #a7541c;
+      --red: #a52e32;
+      --radius: 18px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-synthesis: none;
+    }
+
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--canvas); color: var(--ink); }
+    button, input, select { font: inherit; }
+    button { cursor: pointer; }
+    .app { max-width: 760px; margin: 0 auto; padding: 18px 16px calc(42px + env(safe-area-inset-bottom)); }
+    .topline { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: 3px 2px 20px; }
+    .brand { display: flex; align-items: center; gap: 10px; }
+    .brand-icon { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 14px; background: var(--green); color: white; font-size: 22px; }
+    .brand-name { font-size: 16px; font-weight: 800; letter-spacing: -.03em; }
+    .privacy { color: var(--muted); font-size: 12px; white-space: nowrap; }
+    h1 { margin: 0; font-size: clamp(29px, 8vw, 39px); letter-spacing: -.055em; line-height: 1.06; }
+    h2 { margin: 0; font-size: 21px; letter-spacing: -.035em; }
+    h3 { margin: 0; font-size: 16px; }
+    p { line-height: 1.5; }
+    .intro { margin: 0 2px 19px; }
+    .intro p { color: var(--muted); margin: 8px 0 0; font-size: 15px; }
+    .budget { padding: 19px; background: var(--green); border-radius: 22px; color: white; margin-bottom: 20px; }
+    .budget-top { display: flex; justify-content: space-between; align-items: start; gap: 14px; }
+    .eyebrow { font-size: 12px; font-weight: 700; opacity: .8; }
+    .budget-total { display: flex; align-items: baseline; gap: 4px; margin-top: 5px; }
+    .budget-total strong { font-size: 34px; letter-spacing: -.05em; }
+    .budget-total span { font-size: 15px; opacity: .86; }
+    .budget-left { text-align: right; padding-top: 2px; }
+    .budget-left strong { display: block; font-size: 18px; }
+    .budget-left span { font-size: 11px; opacity: .8; }
+    .meter { height: 8px; overflow: hidden; border-radius: 99px; background: #ffffff38; margin: 14px 0 10px; }
+    .meter-fill { width: 0; height: 100%; background: #d7ed9f; border-radius: inherit; transition: width .2s ease; }
+    .budget-note { margin: 0; min-height: 18px; color: #e4f0e9; font-size: 12px; }
+    .budget.over { background: #8e3533; }
+    .budget.over .meter-fill { background: #ffd2a8; }
+    .section { margin: 26px 0; }
+    .section-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: 0 2px 12px; }
+    .section-heading p { color: var(--muted); font-size: 13px; margin: 4px 0 0; }
+    .count { background: var(--green-soft); color: var(--green-dark); padding: 5px 10px; border-radius: 99px; font-weight: 750; font-size: 12px; white-space: nowrap; }
+    .card { background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius); }
+    .list { overflow: hidden; }
+    .empty { padding: 24px 18px; text-align: center; color: var(--muted); font-size: 14px; }
+    .empty span { display: block; font-size: 27px; margin-bottom: 6px; }
+    .shopping-item { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 11px; align-items: start; padding: 14px; border-bottom: 1px solid var(--line); }
+    .shopping-item:last-child { border-bottom: 0; }
+    .check { appearance: none; width: 25px; height: 25px; margin: 1px 0 0; border: 2px solid #aebbb2; border-radius: 8px; background: white; display: grid; place-items: center; }
+    .check:checked { background: var(--green); border-color: var(--green); }
+    .check:checked::after { content: "✓"; color: white; font-size: 16px; font-weight: 800; }
+    .item-name { font-size: 15px; font-weight: 750; }
+    .item-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; color: var(--muted); font-size: 12px; margin-top: 5px; }
+    .item-meta input { width: 56px; padding: 5px 6px; border: 1px solid var(--line); border-radius: 8px; color: var(--ink); text-align: center; }
+    .item-meta .price-input { width: 72px; }
+    .line-total { text-align: right; font-size: 14px; font-weight: 800; white-space: nowrap; }
+    .line-total small { display: block; margin-top: 4px; color: var(--muted); font-size: 10px; font-weight: 500; }
+    .item-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 7px; }
+    .text-button { padding: 4px 0; border: 0; background: none; color: var(--green); font-size: 12px; font-weight: 700; }
+    .text-button.remove { color: var(--red); }
+    .shopping-item.is-checked .item-name { color: var(--muted); text-decoration: line-through; }
+    .shopping-item.is-checked .line-total { color: var(--muted); }
+    .actions-row { display: flex; gap: 9px; margin-top: 10px; }
+    .button { min-height: 46px; padding: 0 15px; border: 0; border-radius: 13px; font-weight: 750; }
+    .button.primary { background: var(--green); color: white; }
+    .button.primary:hover { background: var(--green-dark); }
+    .button.secondary { background: var(--green-soft); color: var(--green-dark); }
+    .button.ghost { background: white; border: 1px solid var(--line); color: var(--ink); }
+    .button.small { min-height: 38px; padding: 0 12px; font-size: 13px; }
+    .button:focus-visible, input:focus-visible, select:focus-visible, .check:focus-visible { outline: 3px solid #83bda3; outline-offset: 2px; }
+    .categories { display: flex; gap: 8px; overflow-x: auto; padding: 1px 2px 10px; scrollbar-width: thin; }
+    .category-chip { min-height: 37px; flex: 0 0 auto; padding: 0 12px; border: 1px solid var(--line); border-radius: 99px; color: var(--ink); background: white; font-size: 12px; font-weight: 700; }
+    .category-chip.active { color: white; border-color: var(--green); background: var(--green); }
+    .search { width: 100%; min-height: 46px; padding: 0 14px; border: 1px solid var(--line); border-radius: 13px; background: white; margin: 0 0 10px; }
+    .product-list { display: grid; gap: 9px; }
+    .product { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 13px; }
+    .product-name { font-size: 14px; font-weight: 750; }
+    .product-detail { color: var(--muted); font-size: 12px; margin-top: 4px; }
+    .product-detail strong { color: var(--ink); }
+    .pantry-tag { display: inline-flex; margin-left: 5px; padding: 2px 6px; border-radius: 6px; background: #f0eee3; color: #696044; font-size: 10px; font-weight: 750; vertical-align: 1px; }
+    .product-actions { display: grid; justify-items: end; gap: 5px; }
+    .product-manage { display: flex; gap: 9px; }
+    .add-product { min-width: 76px; min-height: 39px; }
+    .form-card { padding: 16px; margin-top: 13px; }
+    .form-card h3 { margin-bottom: 13px; }
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .field { display: grid; gap: 5px; min-width: 0; color: var(--muted); font-size: 12px; font-weight: 650; }
+    .field.full { grid-column: 1 / -1; }
+    .field input, .field select { width: 100%; min-height: 43px; padding: 0 10px; border: 1px solid var(--line); border-radius: 10px; color: var(--ink); background: white; }
+    .checkbox-field { display: flex; align-items: center; gap: 8px; color: var(--ink); font-size: 13px; font-weight: 650; }
+    .checkbox-field input { width: 18px; height: 18px; accent-color: var(--green); }
+    .form-actions { display: flex; gap: 8px; margin-top: 12px; }
+    .note { padding: 13px 15px; border-radius: 13px; background: #fff6e8; color: #68471d; font-size: 13px; line-height: 1.45; }
+    .recipe-list { display: grid; gap: 10px; }
+    .recipe { padding: 14px; }
+    .recipe-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+    .recipe-title { font-size: 14px; font-weight: 800; }
+    .recipe-tag { color: var(--muted); font-size: 11px; }
+    .recipe-ingredients { color: var(--muted); font-size: 12px; line-height: 1.5; margin: 7px 0 10px; }
+    details summary { cursor: pointer; font-weight: 750; color: var(--green-dark); list-style-position: inside; }
+    .recipe-tools { display: flex; gap: 8px; margin: 10px 0; }
+    .recipe-tools input { flex: 1; min-height: 40px; padding: 0 11px; border: 1px solid var(--line); border-radius: 10px; }
+    .tip { padding: 17px; background: #edf2e8; border: 1px solid #e0e8d7; border-radius: var(--radius); }
+    .tip h3 { margin-bottom: 7px; }
+    .tip p { margin: 0; color: #45554a; font-size: 13px; }
+    .footer { margin: 30px 4px 0; color: var(--muted); text-align: center; font-size: 11px; line-height: 1.55; }
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+    @media (min-width: 620px) {
+      .app { padding: 28px 24px 50px; }
+      .product-list { grid-template-columns: 1fr 1fr; }
+    }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; } }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header class="topline">
+      <div class="brand"><div class="brand-icon" aria-hidden="true">🥬</div><div class="brand-name">Min handleliste</div></div>
+      <div class="privacy">Lagrer bare på denne enheten</div>
+    </header>
+
+    <section class="intro" aria-labelledby="page-title">
+      <h1 id="page-title">Ukens handling,<br>litt enklere.</h1>
+      <p>En smart liste for én — hold oversikt og la maten vare lenger.</p>
+    </section>
+
+    <section class="budget" id="budget-card" aria-label="Ukesbudsjett">
+      <div class="budget-top">
+        <div><div class="eyebrow">UKENS ESTIMAT</div><div class="budget-total"><strong id="budget-total">0 kr</strong><span>av <span id="budget-limit">500</span> kr</span></div></div>
+        <div class="budget-left"><strong id="budget-left">500 kr</strong><span>igjen av budsjettet</span></div>
+      </div>
+      <div class="meter" aria-hidden="true"><div class="meter-fill" id="budget-meter"></div></div>
+      <p class="budget-note" id="budget-note" aria-live="polite">Start med å legge til noen varer.</p>
+    </section>
+
+    <section class="section" aria-labelledby="list-title">
+      <div class="section-heading">
+        <div><h2 id="list-title">Handlelisten</h2><p id="list-subtitle">Varene du trenger denne uka.</p></div>
+        <span class="count" id="list-count">0 varer</span>
+      </div>
+      <div class="card list" id="shopping-list" aria-live="polite"></div>
+      <div class="actions-row">
+        <button class="button secondary small" id="clear-checked" type="button">Fjern kjøpte</button>
+        <button class="button ghost small" id="clear-list" type="button">Tøm lista</button>
+      </div>
+    </section>
+
+    <section class="section" aria-labelledby="catalog-title">
+      <div class="section-heading">
+        <div><h2 id="catalog-title">Legg til varer</h2><p>Trykk «Legg til» for å fylle handlelisten.</p></div>
+      </div>
+      <input class="search" id="product-search" type="search" placeholder="Søk etter en vare" aria-label="Søk etter en vare">
+      <div class="categories" id="category-filters" aria-label="Varekategorier"></div>
+      <div class="product-list" id="product-list"></div>
+      <form class="card form-card" id="product-form">
+        <h3 id="form-title">Legg til egen vare</h3>
+        <div class="form-grid">
+          <label class="field full">Navn<input id="product-name-input" maxlength="60" required placeholder="For eksempel gulrøtter"></label>
+          <label class="field">Kategori
+            <select id="product-category-input"></select>
+          </label>
+          <label class="field">Pris per enhet (kr)<input id="product-price-input" type="number" min="0" step="0.01" inputmode="decimal" required placeholder="12,50"></label>
+          <label class="field">Enhet
+            <select id="product-unit-input">
+              <option value="stk">stk</option><option value="kg">kg</option><option value="l">l</option><option value="m">m</option><option value="pakke">pakke</option>
+            </select>
+          </label>
+          <label class="checkbox-field"><input id="product-pantry-input" type="checkbox"> Basisvare – varer flere uker</label>
+        </div>
+        <div class="form-actions"><button class="button primary small" type="submit" id="save-product">Lagre vare</button><button class="button ghost small" type="button" id="cancel-edit" hidden>Avbryt</button></div>
+        <p class="product-detail">Prisene er redigerbare anslag, ikke oppdaterte butikkpriser.</p>
+      </form>
+    </section>
+
+    <section class="section" aria-labelledby="recipe-title">
+      <div class="section-heading">
+        <div><h2 id="recipe-title">Middagsidéer</h2><p>30 rimelige retter — velg antall personer og legg ingrediensene til.</p></div>
+        <span class="count">30 retter</span>
+      </div>
+      <details>
+        <summary>Vis middagsinspirasjon</summary>
+        <div class="recipe-tools"><label class="sr-only" for="servings">Antall personer</label><input id="servings" type="number" min="1" max="8" value="1" inputmode="numeric"><span style="align-self:center;color:var(--muted);font-size:12px">personer</span></div>
+        <div class="recipe-list" id="recipe-list"></div>
+      </details>
+    </section>
+
+    <aside class="section tip">
+      <h3>Smart storhandel 🧊</h3>
+      <p>Se etter tilbud på kyllingfilet, kjøttdeig og laks. Del opp i porsjoner, legg i fryseposer og frys ned det du ikke bruker. Skriv dato på posen, så unngår du matsvinn.</p>
+    </aside>
+    <footer class="footer">Handlelisten lagres i nettleseren på denne enheten med localStorage. Data deles ikke med andre telefoner eller tjenester. Prisene er kun anslag.</footer>
+  </main>
+
+  <script>
+    const categories = ["Kjøtt og fisk", "Frukt og grønt", "Meieriprodukter", "Brød", "Pasta", "Ris", "Frysevarer", "Basisvarer"];
+    const initialProducts = [
+      { name: "Kyllingfilet", category: "Kjøtt og fisk", price: 129, unit: "kg" },
+      { name: "Kjøttdeig", category: "Kjøtt og fisk", price: 99, unit: "kg" },
+      { name: "Laks", category: "Kjøtt og fisk", price: 159, unit: "kg" },
+      { name: "Egg", category: "Meieriprodukter", price: 39, unit: "pakke" },
+      { name: "Melk", category: "Meieriprodukter", price: 22, unit: "l" },
+      { name: "Revet ost", category: "Meieriprodukter", price: 34, unit: "pakke" },
+      { name: "Yoghurt naturell", category: "Meieriprodukter", price: 24, unit: "l" },
+      { name: "Gulrøtter", category: "Frukt og grønt", price: 24, unit: "kg" },
+      { name: "Løk", category: "Frukt og grønt", price: 22, unit: "kg" },
+      { name: "Brokkoli", category: "Frukt og grønt", price: 18, unit: "stk" },
+      { name: "Paprika", category: "Frukt og grønt", price: 12, unit: "stk" },
+      { name: "Tomater", category: "Frukt og grønt", price: 35, unit: "kg" },
+      { name: "Poteter", category: "Frukt og grønt", price: 25, unit: "kg" },
+      { name: "Bananer", category: "Frukt og grønt", price: 25, unit: "kg" },
+      { name: "Epler", category: "Frukt og grønt", price: 30, unit: "kg" },
+      { name: "Spinat", category: "Frukt og grønt", price: 18, unit: "pakke" },
+      { name: "Salat", category: "Frukt og grønt", price: 22, unit: "stk" },
+      { name: "Hvitløk", category: "Frukt og grønt", price: 8, unit: "stk" },
+      { name: "Agurk", category: "Frukt og grønt", price: 18, unit: "stk" },
+      { name: "Brød", category: "Brød", price: 28, unit: "stk" },
+      { name: "Pasta", category: "Pasta", price: 18, unit: "pakke", pantry: true },
+      { name: "Fullkornspasta", category: "Pasta", price: 22, unit: "pakke", pantry: true },
+      { name: "Ris", category: "Ris", price: 26, unit: "kg", pantry: true },
+      { name: "Havregryn", category: "Basisvarer", price: 22, unit: "kg", pantry: true },
+      { name: "Matolje", category: "Basisvarer", price: 35, unit: "l", pantry: true },
+      { name: "Hermetiske tomater", category: "Basisvarer", price: 12, unit: "stk", pantry: true },
+      { name: "Bønner", category: "Basisvarer", price: 15, unit: "stk", pantry: true },
+      { name: "Linser", category: "Basisvarer", price: 18, unit: "stk", pantry: true },
+      { name: "Mais", category: "Basisvarer", price: 12, unit: "stk", pantry: true },
+      { name: "Tortillalefser", category: "Brød", price: 24, unit: "pakke" },
+      { name: "Frosne grønnsaker", category: "Frysevarer", price: 24, unit: "pakke" },
+      { name: "Frosne erter", category: "Frysevarer", price: 20, unit: "pakke" },
+      { name: "Kokosmelk", category: "Basisvarer", price: 18, unit: "stk", pantry: true },
+      { name: "Crème fraîche", category: "Meieriprodukter", price: 22, unit: "stk" },
+      { name: "Sitron", category: "Frukt og grønt", price: 8, unit: "stk" },
+      { name: "Sopp", category: "Frukt og grønt", price: 25, unit: "pakke" },
+      { name: "Pølser", category: "Kjøtt og fisk", price: 34, unit: "pakke" },
+      { name: "Fiskekaker", category: "Kjøtt og fisk", price: 36, unit: "pakke" },
+      { name: "Torsk", category: "Kjøtt og fisk", price: 119, unit: "kg" },
+      { name: "Bacon", category: "Kjøtt og fisk", price: 29, unit: "pakke" },
+      { name: "Kikerter", category: "Basisvarer", price: 15, unit: "stk", pantry: true },
+      { name: "Couscous", category: "Basisvarer", price: 24, unit: "pakke", pantry: true },
+      { name: "Nudler", category: "Pasta", price: 12, unit: "pakke", pantry: true }
+    ];
+    const recipes = [
+      ["Kyllingwok med ris", "15 min", ["Kyllingfilet", "Ris", "Frosne grønnsaker", "Matolje"]],
+      ["Kyllingpasta med tomatsaus", "20 min", ["Kyllingfilet", "Pasta", "Hermetiske tomater", "Løk"]],
+      ["Kylling og ovnsbakte poteter", "35 min", ["Kyllingfilet", "Poteter", "Gulrøtter"]],
+      ["Kylling i kokosmelk", "20 min", ["Kyllingfilet", "Ris", "Kokosmelk", "Løk"]],
+      ["Kyllingwrap", "15 min", ["Kyllingfilet", "Tortillalefser", "Salat", "Yoghurt naturell"]],
+      ["Kylling med brokkoli og ris", "25 min", ["Kyllingfilet", "Brokkoli", "Ris"]],
+      ["Kylling- og grønnsakssuppe", "25 min", ["Kyllingfilet", "Gulrøtter", "Løk", "Poteter"]],
+      ["Kjøttdeig med pasta", "20 min", ["Kjøttdeig", "Pasta", "Hermetiske tomater", "Løk"]],
+      ["Taco med kjøttdeig", "20 min", ["Kjøttdeig", "Tortillalefser", "Salat", "Mais"]],
+      ["Kjøttboller og ris", "25 min", ["Kjøttdeig", "Ris", "Egg", "Løk"]],
+      ["Kjøttdeiggrateng", "30 min", ["Kjøttdeig", "Poteter", "Revet ost", "Hermetiske tomater"]],
+      ["Chili med kjøttdeig", "25 min", ["Kjøttdeig", "Bønner", "Hermetiske tomater", "Ris"]],
+      ["Kjøttdeigwraps", "15 min", ["Kjøttdeig", "Tortillalefser", "Paprika", "Mais"]],
+      ["Kjøttdeig og potetpanne", "25 min", ["Kjøttdeig", "Poteter", "Løk", "Gulrøtter"]],
+      ["Lasagne på enkelt vis", "35 min", ["Kjøttdeig", "Fullkornspasta", "Hermetiske tomater", "Revet ost"]],
+      ["Ovnsbakt laks med poteter", "30 min", ["Laks", "Poteter", "Sitron", "Brokkoli"]],
+      ["Laks med ris og erter", "20 min", ["Laks", "Ris", "Frosne erter"]],
+      ["Laksepasta", "20 min", ["Laks", "Pasta", "Crème fraîche", "Spinat"]],
+      ["Laks i wrap", "15 min", ["Laks", "Tortillalefser", "Salat", "Yoghurt naturell"]],
+      ["Laksewok", "20 min", ["Laks", "Nudler", "Frosne grønnsaker", "Matolje"]],
+      ["Torsk med gulrøtter", "25 min", ["Torsk", "Poteter", "Gulrøtter"]],
+      ["Fiskekaker med råkost", "15 min", ["Fiskekaker", "Gulrøtter", "Poteter"]],
+      ["Pasta med tomatsaus og bønner", "20 min", ["Pasta", "Hermetiske tomater", "Bønner", "Løk"]],
+      ["Kremet sopppasta", "20 min", ["Pasta", "Sopp", "Crème fraîche", "Spinat"]],
+      ["Pasta med egg og bacon", "20 min", ["Pasta", "Egg", "Bacon", "Revet ost"]],
+      ["Stekt ris med egg", "15 min", ["Ris", "Egg", "Frosne grønnsaker", "Matolje"]],
+      ["Linsegryte med ris", "25 min", ["Linser", "Hermetiske tomater", "Ris", "Løk"]],
+      ["Kikertcurry", "20 min", ["Kikerter", "Kokosmelk", "Ris", "Spinat"]],
+      ["Pølseform med grønnsaker", "30 min", ["Pølser", "Poteter", "Gulrøtter", "Løk"]],
+      ["Omelett med spinat", "15 min", ["Egg", "Spinat", "Revet ost", "Brød"]]
+    ];
+
+    const storageKey = "min-handleliste-v1";
+    const defaultState = () => ({
+      products: initialProducts.map((item, index) => ({ ...item, id: `p${index + 1}`, pantry: Boolean(item.pantry) })),
+      items: [],
+      budget: 500
+    });
+    let state;
+    try {
+      const saved = JSON.parse(localStorage.getItem(storageKey));
+      state = saved && Array.isArray(saved.products) && Array.isArray(saved.items) ? saved : defaultState();
+    } catch {
+      state = defaultState();
+    }
+    let activeCategory = "Alle";
+    let editingId = null;
+
+    const $ = (selector) => document.querySelector(selector);
+    const escapeHtml = (value) => String(value).replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
+    const formatKr = (value) => `${Number(value || 0).toLocaleString("nb-NO", { maximumFractionDigits: 2 })} kr`;
+    const productById = (id) => state.products.find((product) => product.id === id);
+    const save = () => {
+      try { localStorage.setItem(storageKey, JSON.stringify(state)); } catch { /* Storage may be disabled or full. */ }
+    };
+
+    function renderBudget() {
+      const total = state.items.reduce((sum, item) => {
+        const product = productById(item.productId);
+        return sum + (product ? Number(item.quantity || 0) * Number(product.price || 0) : 0);
+      }, 0);
+      const left = state.budget - total;
+      const card = $("#budget-card");
+      $("#budget-total").textContent = formatKr(total);
+      $("#budget-limit").textContent = formatKr(state.budget).replace(" kr", "");
+      $("#budget-left").textContent = left >= 0 ? formatKr(left) : `−${formatKr(Math.abs(left))}`;
+      $("#budget-meter").style.width = `${Math.min(100, Math.max(0, total / state.budget * 100))}%`;
+      card.classList.toggle("over", left < 0);
+      $("#budget-note").textContent = left < 0 ? `Du er ${formatKr(Math.abs(left))} over ukesbudsjettet.` : total ? `${formatKr(left)} igjen. Prisene er omtrentlige.` : "Start med å legge til noen varer.";
+    }
+
+    function renderItems() {
+      const root = $("#shopping-list");
+      if (!state.items.length) {
+        root.innerHTML = '<div class="empty"><span aria-hidden="true">🛒</span>Handlelisten er tom ennå.<br>Legg til varer eller velg en middag nedenfor.</div>';
+      } else {
+        root.innerHTML = state.items.map((item) => {
+          const product = productById(item.productId);
+          if (!product) return "";
+          const subtotal = Number(item.quantity || 0) * Number(product.price || 0);
+          return `<div class="shopping-item ${item.checked ? "is-checked" : ""}">
+            <input class="check" type="checkbox" data-action="check" data-id="${escapeHtml(item.id)}" ${item.checked ? "checked" : ""} aria-label="Kjøpt: ${escapeHtml(product.name)}">
+            <div><div class="item-name">${escapeHtml(product.name)}${product.pantry ? '<span class="pantry-tag">basisvare</span>' : ""}</div>
+              <div class="item-meta"><label>Antall <input type="number" min="0.1" step="0.1" inputmode="decimal" data-action="quantity" data-id="${escapeHtml(item.id)}" value="${escapeHtml(item.quantity)}" aria-label="Antall ${escapeHtml(product.name)}"></label>
+              <label>Pris/${escapeHtml(product.unit)} <input class="price-input" type="number" min="0" step="0.01" inputmode="decimal" data-action="price" data-id="${escapeHtml(item.id)}" value="${escapeHtml(product.price)}" aria-label="Pris per ${escapeHtml(product.unit)} for ${escapeHtml(product.name)}"></label>
+              <span>${escapeHtml(product.category)}</span></div>
+              <div class="item-actions"><button class="text-button" type="button" data-action="edit" data-id="${escapeHtml(product.id)}">Endre vare</button><button class="text-button remove" type="button" data-action="remove-item" data-id="${escapeHtml(item.id)}">Fjern</button></div>
+            </div><div class="line-total">${formatKr(subtotal)}<small>${escapeHtml(product.unit)} × ${escapeHtml(item.quantity)}</small></div>
+          </div>`;
+        }).join("");
+      }
+      const unchecked = state.items.filter((item) => !item.checked).length;
+      $("#list-count").textContent = `${state.items.length} ${state.items.length === 1 ? "vare" : "varer"}`;
+      $("#list-subtitle").textContent = state.items.length ? `${unchecked} igjen å handle.` : "Varene du trenger denne uka.";
+      $("#clear-checked").disabled = !state.items.some((item) => item.checked);
+      $("#clear-list").disabled = !state.items.length;
+      $("#clear-checked").style.opacity = $("#clear-checked").disabled ? ".55" : "1";
+      $("#clear-list").style.opacity = $("#clear-list").disabled ? ".55" : "1";
+      renderBudget();
+    }
+
+    function renderFilters() {
+      const allCategories = ["Alle", ...categories];
+      $("#category-filters").innerHTML = allCategories.map((category) => `<button type="button" class="category-chip ${activeCategory === category ? "active" : ""}" data-category="${escapeHtml(category)}" aria-pressed="${activeCategory === category}">${escapeHtml(category)}</button>`).join("");
+      $("#product-category-input").innerHTML = categories.map((category) => `<option>${escapeHtml(category)}</option>`).join("");
+    }
+
+    function renderProducts() {
+      const query = $("#product-search").value.trim().toLocaleLowerCase("nb");
+      const products = state.products.filter((product) =>
+        (activeCategory === "Alle" || product.category === activeCategory) &&
+        product.name.toLocaleLowerCase("nb").includes(query)
+      );
+      $("#product-list").innerHTML = products.length ? products.map((product) => {
+        const inList = state.items.some((item) => item.productId === product.id);
+        return `<article class="card product">
+          <div><div class="product-name">${escapeHtml(product.name)}${product.pantry ? '<span class="pantry-tag">basisvare</span>' : ""}</div>
+          <div class="product-detail"><strong>${formatKr(product.price)} / ${escapeHtml(product.unit)}</strong> · ${escapeHtml(product.category)}</div></div>
+          <div class="product-actions">
+            <button type="button" class="button ${inList ? "secondary" : "primary"} small add-product" data-action="add" data-id="${escapeHtml(product.id)}">${inList ? "Lagt til ✓" : "Legg til"}</button>
+            ${product.id.startsWith("custom-") ? `<div class="product-manage"><button type="button" class="text-button" data-action="edit" data-id="${escapeHtml(product.id)}">Endre</button><button type="button" class="text-button remove" data-action="delete-product" data-id="${escapeHtml(product.id)}">Slett</button></div>` : ""}
+          </div>
+        </article>`;
+      }).join("") : '<div class="empty card">Ingen varer funnet. Legg den til som egen vare nedenfor.</div>';
+    }
+
+    function addProduct(productId, quantity = 1) {
+      const existing = state.items.find((item) => item.productId === productId);
+      if (existing) existing.quantity = Number(existing.quantity || 0) + Number(quantity);
+      else state.items.push({ id: `i${Date.now()}${Math.random().toString(36).slice(2, 7)}`, productId, quantity: Number(quantity), checked: false });
+      save();
+      renderItems();
+      renderProducts();
+    }
+
+    function editProduct(productId) {
+      const product = productById(productId);
+      if (!product) return;
+      editingId = product.id;
+      $("#form-title").textContent = "Endre vare";
+      $("#save-product").textContent = "Lagre endringer";
+      $("#cancel-edit").hidden = false;
+      $("#product-name-input").value = product.name;
+      $("#product-category-input").value = product.category;
+      $("#product-price-input").value = product.price;
+      $("#product-unit-input").value = product.unit;
+      $("#product-pantry-input").checked = product.pantry;
+      $("#product-name-input").focus();
+      $("#product-form").scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+
+    function resetProductForm() {
+      editingId = null;
+      $("#product-form").reset();
+      $("#form-title").textContent = "Legg til egen vare";
+      $("#save-product").textContent = "Lagre vare";
+      $("#cancel-edit").hidden = true;
+    }
+
+    function renderRecipes() {
+      $("#recipe-list").innerHTML = recipes.map(([name, time, ingredients], index) => `<article class="card recipe">
+        <div class="recipe-top"><div class="recipe-title">${String(index + 1).padStart(2, "0")}. ${escapeHtml(name)}</div><span class="recipe-tag">${escapeHtml(time)}</span></div>
+        <p class="recipe-ingredients">${ingredients.map(escapeHtml).join(" · ")}</p>
+        <button type="button" class="button secondary small" data-recipe="${index}">Legg til ingredienser</button>
+      </article>`).join("");
+    }
+
+    renderFilters();
+    renderItems();
+    renderProducts();
+    renderRecipes();
+
+    $("#shopping-list").addEventListener("change", (event) => {
+      const control = event.target;
+      const item = state.items.find((entry) => entry.id === control.dataset.id);
+      if (!item) return;
+      if (control.dataset.action === "check") item.checked = control.checked;
+      if (control.dataset.action === "quantity") item.quantity = Math.max(.1, Number(control.value) || .1);
+      if (control.dataset.action === "price") {
+        const product = productById(item.productId);
+        if (product) product.price = Math.max(0, Number(control.value) || 0);
+      }
+      save();
+      renderItems();
+      renderProducts();
+    });
+    $("#shopping-list").addEventListener("click", (event) => {
+      const button = event.target.closest("[data-action]");
+      if (!button) return;
+      if (button.dataset.action === "edit") editProduct(button.dataset.id);
+      if (button.dataset.action === "remove-item") state.items = state.items.filter((item) => item.id !== button.dataset.id);
+      if (button.dataset.action === "remove-item") { save(); renderItems(); renderProducts(); }
+    });
+    $("#product-list").addEventListener("click", (event) => {
+      const button = event.target.closest("[data-action]");
+      if (!button) return;
+      if (button.dataset.action === "add") addProduct(button.dataset.id);
+      if (button.dataset.action === "edit") editProduct(button.dataset.id);
+      if (button.dataset.action === "delete-product") {
+        state.products = state.products.filter((product) => product.id !== button.dataset.id);
+        state.items = state.items.filter((item) => item.productId !== button.dataset.id);
+        save(); renderProducts(); renderItems();
+      }
+    });
+    $("#category-filters").addEventListener("click", (event) => {
+      const button = event.target.closest("[data-category]");
+      if (!button) return;
+      activeCategory = button.dataset.category;
+      renderFilters();
+      renderProducts();
+    });
+    $("#product-search").addEventListener("input", renderProducts);
+    $("#product-form").addEventListener("submit", (event) => {
+      event.preventDefault();
+      const name = $("#product-name-input").value.trim();
+      const price = Number($("#product-price-input").value);
+      if (!name || !Number.isFinite(price) || price < 0) return;
+      const product = {
+        name, category: $("#product-category-input").value, price,
+        unit: $("#product-unit-input").value, pantry: $("#product-pantry-input").checked
+      };
+      if (editingId) {
+        Object.assign(productById(editingId), product);
+      } else {
+        const id = `custom-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+        state.products.push({ ...product, id });
+      }
+      save();
+      resetProductForm();
+      renderProducts();
+      renderItems();
+    });
+    $("#cancel-edit").addEventListener("click", resetProductForm);
+    $("#clear-checked").addEventListener("click", () => {
+      state.items = state.items.filter((item) => !item.checked);
+      save(); renderItems(); renderProducts();
+    });
+    $("#clear-list").addEventListener("click", () => {
+      if (!state.items.length || !confirm("Tømme hele handlelisten?")) return;
+      state.items = [];
+      save(); renderItems(); renderProducts();
+    });
+    $("#recipe-list").addEventListener("click", (event) => {
+      const button = event.target.closest("[data-recipe]");
+      if (!button) return;
+      const servings = Math.min(8, Math.max(1, Number($("#servings").value) || 1));
+      for (const name of recipes[Number(button.dataset.recipe)][2]) {
+        const product = state.products.find((entry) => entry.name.toLocaleLowerCase("nb") === name.toLocaleLowerCase("nb"));
+        if (product) addProduct(product.id, servings);
+      }
+      $("#list-title").scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  </script>
+</body>
+</html>
