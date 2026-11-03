@@ -23,25 +23,37 @@ function validateSources(config) {
 }
 
 function normalizeProduct(product, source, fetchedAt) {
-  if (product?.id !== source.productId || product.name !== source.name ||
-      product.store?.name !== source.store) throw new Error(`Produktidentitet endret for ${source.id}.`);
+  const stores = Array.isArray(product?.store)
+    ? product.store.filter((store) => store?.name === source.store)
+    : [];
+  if (product?.id !== source.productId || product.name !== source.name || stores.length !== 1) {
+    throw new Error(`Produktidentitet endret for ${source.id}.`);
+  }
   const actual = baseAmount(product.weight, product.weight_unit);
   const expected = baseAmount(source.packageSize.amount, source.packageSize.unit);
   if (actual.unit !== expected.unit || Math.abs(actual.amount - expected.amount) > 1e-8) {
     throw new Error(`Pakningsstørrelse endret for ${source.id}.`);
   }
+  if (typeof product.current_price !== "number" || !Number.isFinite(product.current_price) ||
+      product.current_price <= 0 ||
+      (product.current_unit_price != null &&
+        (typeof product.current_unit_price !== "number" ||
+          !Number.isFinite(product.current_unit_price) || product.current_unit_price <= 0))) {
+    throw new Error(`Ugyldig pris for ${source.id}.`);
+  }
   if (!Array.isArray(product.price_history)) throw new Error(`Prisdato mangler for ${source.id}.`);
   const latest = product.price_history
-    .filter((entry) => typeof entry.date === "string" && Number.isFinite(Date.parse(entry.date)))
+    .filter((entry) => typeof entry?.date === "string" &&
+      Number.isFinite(Date.parse(entry.date)) &&
+      typeof entry.price === "number" && Number.isFinite(entry.price) && entry.price > 0)
     .sort((a, b) => Date.parse(b.date) - Date.parse(a.date))[0];
-  if (!latest || latest.price !== product.current_price ||
-      Date.parse(latest.date) > Date.parse(fetchedAt)) {
-    throw new Error(`Pris og prisdato kan ikke verifiseres for ${source.id}.`);
+  if (!latest || Date.parse(latest.date) > Date.parse(fetchedAt)) {
+    throw new Error(`Prisdato kan ikke verifiseres for ${source.id}.`);
   }
   const quote = {
     productId: product.id,
     name: product.name,
-    store: product.store.name,
+    store: stores[0].name,
     packageSize: { amount: product.weight, unit: product.weight_unit },
     packagePrice: product.current_price,
     observedAt: latest.date,

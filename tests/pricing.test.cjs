@@ -10,8 +10,9 @@ const source = {
   packageSize: { amount: 400, unit: "g" }
 };
 const rawProduct = () => ({
-  id: 123, name: source.name, store: { name: source.store },
-  weight: 400, weight_unit: "g", current_price: 60,
+  id: 123, name: source.name,
+  store: [{ name: "Annen butikk" }, { name: source.store }],
+  weight: 400, weight_unit: "g", current_price: 60, current_unit_price: 150,
   price_history: [{ price: 60, date: "2026-11-03T06:00:00Z" }]
 });
 const config = { version: 1, products: [source] };
@@ -35,12 +36,29 @@ test("derives unit prices from exact package price and content", () => {
   assert.throws(() => pricing.priceForUnit(quote(), "l"), /Uforenlige/);
 });
 
-test("requires source identity, package size and matching latest price date", () => {
+test("selects the exact store and keeps current, unit and historical prices independent", () => {
+  const product = rawProduct();
+  product.current_unit_price = 999;
+  product.price_history = [{ price: 59, date: "2026-11-03T06:00:00Z" }];
+  const normalized = normalizeProduct(product, source, now.toISOString());
+  assert.equal(normalized.store, source.store);
+  assert.equal(normalized.packagePrice, 60);
+  assert.equal(normalized.observedAt, "2026-11-03T06:00:00Z");
+  assert.throws(() => normalizeProduct({
+    ...product, store: [{ name: "Annen butikk" }]
+  }, source, now.toISOString()), /identitet/);
+  assert.throws(() => normalizeProduct({
+    ...product, store: [{ name: source.store }, { name: source.store }]
+  }, source, now.toISOString()), /identitet/);
+});
+
+test("requires source identity, package size and a valid non-future price date", () => {
   assert.equal(quote().observedAt, "2026-11-03T06:00:00Z");
   for (const change of [
     { id: 124 }, { name: "Middag med kylling" }, { store: { name: "Annen butikk" } },
-    { weight: 500 }, { weight: null }, { current_price: 0 },
-    { price_history: [] }, { price_history: [{ price: 59, date: "2026-11-03" }] },
+    { weight: 500 }, { weight: null }, { current_price: 0 }, { current_price: "60" },
+    { current_unit_price: "150" }, { current_unit_price: 0 },
+    { price_history: [] }, { price_history: [{ price: 0, date: "2026-11-03" }] },
     { price_history: [{ price: 60, date: "2026-11-04" }] }
   ]) {
     assert.throws(() => normalizeProduct({ ...rawProduct(), ...change }, source, now.toISOString()));
