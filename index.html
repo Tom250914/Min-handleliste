@@ -186,7 +186,7 @@
           <label class="checkbox-field"><input id="product-pantry-input" type="checkbox"> Basisvare – varer flere uker</label>
         </div>
         <div class="form-actions"><button class="button primary small" type="submit" id="save-product">Lagre vare</button><button class="button ghost small" type="button" id="cancel-edit" hidden>Avbryt</button></div>
-        <p class="product-detail">Prisene er redigerbare anslag, ikke oppdaterte butikkpriser.</p>
+        <p class="product-detail" id="price-status" role="status">Pris ikke verifisert. Anslag og manuelle priser kan redigeres.</p>
       </form>
     </section>
 
@@ -206,9 +206,10 @@
       <h3>Smart storhandel 🧊</h3>
       <p>Se etter tilbud på kyllingfilet, kjøttdeig og laks. Del opp i porsjoner, legg i fryseposer og frys ned det du ikke bruker. Skriv dato på posen, så unngår du matsvinn.</p>
     </aside>
-    <footer class="footer">Handlelisten lagres i nettleseren på denne enheten med localStorage. Data deles ikke med andre telefoner eller tjenester. Prisene er kun anslag.</footer>
+    <footer class="footer">Handlelisten lagres i nettleseren på denne enheten med localStorage. Listen deles ikke med andre telefoner eller tjenester. Butikkpriser hentes fra en offentlig prisfil basert på Kassalapp, ikke direkte fra API-et. Budsjettet viser beregnet forbruk, ikke avrundet antall hele pakninger.</footer>
   </main>
 
+  <script src="pricing.js"></script>
   <script>
     const categories = ["Kjøtt og fisk", "Frukt og grønt", "Meieriprodukter", "Brød", "Pasta", "Ris", "Frysevarer", "Basisvarer"];
     const initialProducts = [
@@ -289,6 +290,100 @@
       ["Omelett med spinat", "15 min", ["Egg", "Spinat", "Revet ost", "Brød"]]
     ];
 
+    // Amount per person, independent of the product's sale unit.
+    const portions = {
+      "Kyllingfilet": [150, "g"], "Kjøttdeig": [150, "g"], "Laks": [150, "g"], "Torsk": [150, "g"],
+      "Pasta": [75, "g"], "Fullkornspasta": [75, "g"], "Ris": [75, "g"], "Nudler": [75, "g"],
+      "Poteter": [250, "g"], "Gulrøtter": [100, "g"], "Løk": [75, "g"], "Brokkoli": [.5, "stk"],
+      "Matolje": [15, "ml"], "Frosne grønnsaker": [150, "g"], "Hermetiske tomater": [200, "g"],
+      "Kokosmelk": [200, "ml"], "Tortillalefser": [2, "stk"], "Salat": [.25, "stk"],
+      "Yoghurt naturell": [50, "ml"], "Mais": [75, "g"], "Egg": [2, "stk"], "Revet ost": [30, "g"],
+      "Bønner": [150, "g"], "Paprika": [.5, "stk"], "Sitron": [.25, "stk"], "Frosne erter": [100, "g"],
+      "Crème fraîche": [75, "g"], "Spinat": [50, "g"], "Fiskekaker": [150, "g"],
+      "Sopp": [100, "g"], "Bacon": [50, "g"], "Linser": [150, "g"], "Kikerter": [150, "g"],
+      "Pølser": [150, "g"], "Brød": [.15, "stk"]
+    };
+    // Conversion assumptions for unverified estimates, not sourced package facts.
+    const estimatedPackages = {
+      p4: { amount: 12, unit: "stk" }, p6: { amount: 200, unit: "g" },
+      p16: { amount: 200, unit: "g" }, p21: { amount: 500, unit: "g" },
+      p22: { amount: 500, unit: "g" }, p26: { amount: 400, unit: "g" },
+      p27: { amount: 400, unit: "g" }, p28: { amount: 400, unit: "g" },
+      p29: { amount: 300, unit: "g" }, p30: { amount: 8, unit: "stk" },
+      p31: { amount: 500, unit: "g" }, p32: { amount: 500, unit: "g" },
+      p33: { amount: 400, unit: "ml" }, p34: { amount: 300, unit: "g" },
+      p36: { amount: 250, unit: "g" }, p37: { amount: 500, unit: "g" },
+      p38: { amount: 600, unit: "g" }, p40: { amount: 150, unit: "g" },
+      p41: { amount: 400, unit: "g" }, p42: { amount: 500, unit: "g" },
+      p43: { amount: 85, unit: "g" }
+    };
+    const { quantityFor, verified, validQuote, priceForUnit, baseAmount } = HandlelistePricing;
+    let priceSnapshot = null;
+    const baselineFor = (product) => initialProducts[Number(product.id.slice(1)) - 1];
+    const originalIdentity = (product) => {
+      const baseline = baselineFor(product);
+      return /^p\d+$/.test(product.id) && baseline &&
+        product.name === baseline.name && product.unit === baseline.unit;
+    };
+    const manualPrice = (product) => product.priceOverride === true ||
+      !originalIdentity(product) || product.price !== baselineFor(product).price;
+    const quoteFor = (product) => originalIdentity(product) ? priceSnapshot?.products?.[product.id] : null;
+    function calculationPackage(product) {
+      return ["pakke", "stk"].includes(product.unit) ? estimatedPackages[product.id] : null;
+    }
+    function sourcePrice(product, quote) {
+      const pack = calculationPackage(product);
+      return pack
+        ? quote.packagePrice * quantityFor(pack.amount, pack.unit, "pakke", quote.packageSize)
+        : priceForUnit(quote, product.unit);
+    }
+    function unitLabel(product) {
+      const pack = calculationPackage(product);
+      return pack ? `${formatAmount(pack.amount)} ${pack.unit}` : product.unit;
+    }
+    function currentQuote(product) {
+      const quote = quoteFor(product);
+      if (!verified(priceSnapshot, quote)) return null;
+      try { sourcePrice(product, quote); return quote; }
+      catch { return null; }
+    }
+    function effectivePrice(product) {
+      const quote = !manualPrice(product) && currentQuote(product);
+      return quote ? sourcePrice(product, quote) : product.price;
+    }
+    const formatAmount = (value) => Number(value.toFixed(6)).toLocaleString("nb-NO", { maximumFractionDigits: 6 });
+    const formatDate = (date) => new Date(date).toLocaleDateString("nb-NO");
+    function priceDetails(product) {
+      const quote = quoteFor(product);
+      const active = !manualPrice(product) && currentQuote(product);
+      const status = active ? "Kilde: Kassalapp" : `Pris ikke verifisert · ${manualPrice(product) ? "Manuell pris" : "Anslag"}`;
+      if (!validQuote(quote)) {
+        return `${status} · Butikk: ukjent · Pakning: ukjent · Sist prisoppdatert: ukjent`;
+      }
+      const pack = quote.packageSize;
+      const base = baseAmount(pack.amount, pack.unit);
+      return `${status} · ${escapeHtml(quote.name)} · Butikk: ${escapeHtml(quote.store)} · Pakning: ${formatAmount(pack.amount)} ${escapeHtml(pack.unit)} (${formatKr(quote.packagePrice)}) · Kildepris: ${formatKr(quote.packagePrice / base.amount)}/${escapeHtml(base.unit)} · Sist prisoppdatert: ${formatDate(quote.observedAt)}`;
+    }
+    async function loadPrices() {
+      try {
+        const response = await fetch("data/prices.json", { cache: "no-store" });
+        if (!response.ok) throw new Error("Prisfilen kunne ikke lastes.");
+        const snapshot = await response.json();
+        if (snapshot?.version !== 1 || !snapshot.products || typeof snapshot.products !== "object" || Array.isArray(snapshot.products)) {
+          throw new Error("Prisfilen har ugyldig format.");
+        }
+        priceSnapshot = snapshot;
+        $("#price-status").textContent = snapshot.status === "ok"
+          ? "Kilde: Kassalapp. Bare komplette priser under 48 timer brukes som butikkpris. Manuelle priser beholdes."
+          : "Pris ikke verifisert. Prisoppdatering er ikke konfigurert. Anslag og manuelle priser beholdes.";
+      } catch {
+        priceSnapshot = null;
+        $("#price-status").textContent = "Pris ikke verifisert. Prisfilen er utilgjengelig. Anslag og manuelle priser beholdes.";
+      }
+      renderItems();
+      renderProducts();
+    }
+
     const storageKey = "min-handleliste-v1";
     const defaultState = () => ({
       products: initialProducts.map((item, index) => ({ ...item, id: `p${index + 1}`, pantry: Boolean(item.pantry) })),
@@ -316,7 +411,7 @@
     function renderBudget() {
       const total = state.items.reduce((sum, item) => {
         const product = productById(item.productId);
-        return sum + (product ? Number(item.quantity || 0) * Number(product.price || 0) : 0);
+        return sum + (product ? Number(item.quantity || 0) * Number(effectivePrice(product) || 0) : 0);
       }, 0);
       const left = state.budget - total;
       const card = $("#budget-card");
@@ -336,15 +431,16 @@
         root.innerHTML = state.items.map((item) => {
           const product = productById(item.productId);
           if (!product) return "";
-          const subtotal = Number(item.quantity || 0) * Number(product.price || 0);
+          const subtotal = Number(item.quantity || 0) * Number(effectivePrice(product) || 0);
           return `<div class="shopping-item ${item.checked ? "is-checked" : ""}">
             <input class="check" type="checkbox" data-action="check" data-id="${escapeHtml(item.id)}" ${item.checked ? "checked" : ""} aria-label="Kjøpt: ${escapeHtml(product.name)}">
             <div><div class="item-name">${escapeHtml(product.name)}${product.pantry ? '<span class="pantry-tag">basisvare</span>' : ""}</div>
-              <div class="item-meta"><label>Antall <input type="number" min="0.1" step="0.1" inputmode="decimal" data-action="quantity" data-id="${escapeHtml(item.id)}" value="${escapeHtml(item.quantity)}" aria-label="Antall ${escapeHtml(product.name)}"></label>
-              <label>Pris/${escapeHtml(product.unit)} <input class="price-input" type="number" min="0" step="0.01" inputmode="decimal" data-action="price" data-id="${escapeHtml(item.id)}" value="${escapeHtml(product.price)}" aria-label="Pris per ${escapeHtml(product.unit)} for ${escapeHtml(product.name)}"></label>
+              <div class="item-meta"><label>Antall <input type="number" min="0.000001" step="any" inputmode="decimal" data-action="quantity" data-id="${escapeHtml(item.id)}" value="${escapeHtml(item.quantity)}" aria-label="Antall ${escapeHtml(product.name)}"></label>
+              <label>Pris/${escapeHtml(unitLabel(product))} <input class="price-input" type="number" min="0" step="0.01" inputmode="decimal" data-action="price" data-id="${escapeHtml(item.id)}" value="${escapeHtml(Number(effectivePrice(product).toFixed(2)))}" aria-label="Pris per ${escapeHtml(unitLabel(product))} for ${escapeHtml(product.name)}"></label>
               <span>${escapeHtml(product.category)}</span></div>
-              <div class="item-actions"><button class="text-button" type="button" data-action="edit" data-id="${escapeHtml(product.id)}">Endre vare</button><button class="text-button remove" type="button" data-action="remove-item" data-id="${escapeHtml(item.id)}">Fjern</button></div>
-            </div><div class="line-total">${formatKr(subtotal)}<small>${escapeHtml(product.unit)} × ${escapeHtml(item.quantity)}</small></div>
+              <div class="product-detail">${priceDetails(product)}</div>
+              <div class="item-actions"><button class="text-button" type="button" data-action="edit" data-id="${escapeHtml(product.id)}">Endre vare</button>${manualPrice(product) && currentQuote(product) ? `<button class="text-button" type="button" data-action="source-price" data-id="${escapeHtml(product.id)}">Bruk kildepris</button>` : ""}<button class="text-button remove" type="button" data-action="remove-item" data-id="${escapeHtml(item.id)}">Fjern</button></div>
+            </div><div class="line-total">${formatKr(subtotal)}<small>${escapeHtml(unitLabel(product))} × ${escapeHtml(item.quantity)}</small></div>
           </div>`;
         }).join("");
       }
@@ -374,7 +470,8 @@
         const inList = state.items.some((item) => item.productId === product.id);
         return `<article class="card product">
           <div><div class="product-name">${escapeHtml(product.name)}${product.pantry ? '<span class="pantry-tag">basisvare</span>' : ""}</div>
-          <div class="product-detail"><strong>${formatKr(product.price)} / ${escapeHtml(product.unit)}</strong> · ${escapeHtml(product.category)}</div></div>
+          <div class="product-detail"><strong>${formatKr(effectivePrice(product))} / ${escapeHtml(unitLabel(product))}</strong> · ${escapeHtml(product.category)}</div>
+          <div class="product-detail">${priceDetails(product)}</div></div>
           <div class="product-actions">
             <button type="button" class="button ${inList ? "secondary" : "primary"} small add-product" data-action="add" data-id="${escapeHtml(product.id)}">${inList ? "Lagt til ✓" : "Legg til"}</button>
             ${product.id.startsWith("custom-") ? `<div class="product-manage"><button type="button" class="text-button" data-action="edit" data-id="${escapeHtml(product.id)}">Endre</button><button type="button" class="text-button remove" data-action="delete-product" data-id="${escapeHtml(product.id)}">Slett</button></div>` : ""}
@@ -385,7 +482,7 @@
 
     function addProduct(productId, quantity = 1) {
       const existing = state.items.find((item) => item.productId === productId);
-      if (existing) existing.quantity = Number(existing.quantity || 0) + Number(quantity);
+      if (existing) existing.quantity = Number((Number(existing.quantity || 0) + Number(quantity)).toFixed(6));
       else state.items.push({ id: `i${Date.now()}${Math.random().toString(36).slice(2, 7)}`, productId, quantity: Number(quantity), checked: false });
       save();
       renderItems();
@@ -401,7 +498,7 @@
       $("#cancel-edit").hidden = false;
       $("#product-name-input").value = product.name;
       $("#product-category-input").value = product.category;
-      $("#product-price-input").value = product.price;
+      $("#product-price-input").value = Number(effectivePrice(product).toFixed(2));
       $("#product-unit-input").value = product.unit;
       $("#product-pantry-input").checked = product.pantry;
       $("#product-name-input").focus();
@@ -417,9 +514,13 @@
     }
 
     function renderRecipes() {
+      const servings = Math.min(8, Math.max(1, Math.floor(Number($("#servings").value) || 1)));
       $("#recipe-list").innerHTML = recipes.map(([name, time, ingredients], index) => `<article class="card recipe">
         <div class="recipe-top"><div class="recipe-title">${String(index + 1).padStart(2, "0")}. ${escapeHtml(name)}</div><span class="recipe-tag">${escapeHtml(time)}</span></div>
-        <p class="recipe-ingredients">${ingredients.map(escapeHtml).join(" · ")}</p>
+        <p class="recipe-ingredients">${ingredients.map((ingredient) => {
+          const [amount, unit] = portions[ingredient];
+          return `${escapeHtml(ingredient)} ${formatAmount(amount * servings)} ${unit}`;
+        }).join(" · ")}. Mengder er beregnet forbruk; pakninger uten kilde er anslått.</p>
         <button type="button" class="button secondary small" data-recipe="${index}">Legg til ingredienser</button>
       </article>`).join("");
     }
@@ -428,16 +529,33 @@
     renderItems();
     renderProducts();
     renderRecipes();
+    loadPrices();
+    setInterval(loadPrices, 60 * 60 * 1000);
+    $("#servings").addEventListener("input", renderRecipes);
 
     $("#shopping-list").addEventListener("change", (event) => {
       const control = event.target;
       const item = state.items.find((entry) => entry.id === control.dataset.id);
       if (!item) return;
       if (control.dataset.action === "check") item.checked = control.checked;
-      if (control.dataset.action === "quantity") item.quantity = Math.max(.1, Number(control.value) || .1);
+      if (control.dataset.action === "quantity") {
+        const quantity = Number(control.value);
+        if (!Number.isFinite(quantity) || quantity <= 0) {
+          alert("Mengden må være et positivt tall.");
+          renderItems();
+          return;
+        }
+        item.quantity = quantity;
+      }
       if (control.dataset.action === "price") {
         const product = productById(item.productId);
-        if (product) product.price = Math.max(0, Number(control.value) || 0);
+        const price = Number(control.value);
+        if (!Number.isFinite(price) || price < 0 || !control.value.trim()) {
+          alert("Prisen må være et tall på minst 0 kr.");
+          renderItems();
+          return;
+        }
+        if (product) { product.price = price; product.priceOverride = true; }
       }
       save();
       renderItems();
@@ -447,6 +565,14 @@
       const button = event.target.closest("[data-action]");
       if (!button) return;
       if (button.dataset.action === "edit") editProduct(button.dataset.id);
+      if (button.dataset.action === "source-price") {
+        const product = productById(button.dataset.id);
+        if (product && currentQuote(product)) {
+          product.price = baselineFor(product).price;
+          product.priceOverride = false;
+          save(); renderItems(); renderProducts();
+        }
+      }
       if (button.dataset.action === "remove-item") state.items = state.items.filter((item) => item.id !== button.dataset.id);
       if (button.dataset.action === "remove-item") { save(); renderItems(); renderProducts(); }
     });
@@ -479,10 +605,10 @@
         unit: $("#product-unit-input").value, pantry: $("#product-pantry-input").checked
       };
       if (editingId) {
-        Object.assign(productById(editingId), product);
+        Object.assign(productById(editingId), product, { priceOverride: true });
       } else {
         const id = `custom-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-        state.products.push({ ...product, id });
+        state.products.push({ ...product, id, priceOverride: true });
       }
       save();
       resetProductForm();
@@ -502,11 +628,22 @@
     $("#recipe-list").addEventListener("click", (event) => {
       const button = event.target.closest("[data-recipe]");
       if (!button) return;
-      const servings = Math.min(8, Math.max(1, Number($("#servings").value) || 1));
-      for (const name of recipes[Number(button.dataset.recipe)][2]) {
-        const product = state.products.find((entry) => entry.name.toLocaleLowerCase("nb") === name.toLocaleLowerCase("nb"));
-        if (product) addProduct(product.id, servings);
+      const servings = Math.min(8, Math.max(1, Math.floor(Number($("#servings").value) || 1)));
+      const additions = [];
+      try {
+        for (const name of recipes[Number(button.dataset.recipe)][2]) {
+          const product = state.products.find((entry) => entry.name.toLocaleLowerCase("nb") === name.toLocaleLowerCase("nb"));
+          if (!product) throw new Error(`Varen «${name}» mangler. Gjenopprett varen før du legger til middagen.`);
+          const [amount, unit] = portions[name];
+          const pack = calculationPackage(product);
+          const quantity = quantityFor(amount * servings, unit, product.unit, pack);
+          additions.push({ id: product.id, quantity: Number(quantity.toFixed(6)) });
+        }
+      } catch (error) {
+        alert(`Middagen ble ikke lagt til. ${error.message}`);
+        return;
       }
+      for (const addition of additions) addProduct(addition.id, addition.quantity);
       $("#list-title").scrollIntoView({ behavior: "smooth", block: "start" });
     });
   </script>
